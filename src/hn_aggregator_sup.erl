@@ -26,10 +26,21 @@ start_link() ->
 %%                  modules => modules()}   % optional
 init([]) ->
     SupFlags =
-        #{strategy => one_for_one,
-          intensity => 0,
-          period => 1},
-    ChildSpecs = [],
+        #{
+            strategy => one_for_one,
+            intensity => 0,
+            period => 1
+        },
+    ChildSpecs = [
+        #{
+            id => hn_poller,
+            start => {hn_poller, start_link, []},
+            restart => permanent,
+            shutdown => 5000,
+            type => worker,
+            modules => [hn_poller]
+        }
+    ],
     {ok, {SupFlags, ChildSpecs}}.
 
 %% internal functions

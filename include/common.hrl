@@ -1,0 +1,1 @@
+-define(DEFAULT_STORIES_TABLE, stories).
