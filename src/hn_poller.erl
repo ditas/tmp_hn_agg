@@ -33,7 +33,8 @@ init([]) ->
         top_n => TopN,
         max_polling_attempts => MaxPollingAttempts,
         used_polling_attempts => 0,
-        polling_backoff_ms => PollingBackOffMS
+        polling_backoff_ms => PollingBackOffMS,
+        stories => []
     }}.
 
 handle_call(_Request, _From, State) ->
@@ -94,22 +95,26 @@ handle_info(
     #{
         stories_requests := StoriesRequests,
         polling_rate_ms := PollingRate,
-        max_polling_attempts := MaxPollingAttempts
+        max_polling_attempts := MaxPollingAttempts,
+        stories := Stories
     } = State
 ) ->
     case lists:keytake(RequestId, 2, StoriesRequests) of
         {value, {SortingOrder, _RequestId}, RemainingStoriesRequests} ->
-            ok = handle_story(SortingOrder, Body),
-            NewState = State#{stories_requests => RemainingStoriesRequests},
+            State1 = State#{
+                stories => [handle_story(SortingOrder, Body) | Stories],
+                stories_requests => RemainingStoriesRequests
+            },
             %% Only restart polling when ALL stories are fetched
             case RemainingStoriesRequests of
                 [] ->
                     ?LOG_INFO("All stories fetched successfully. Starting new polling cycle."),
+                    State2 = handle_stories(State1),
                     erlang:send_after(PollingRate, self(), {poll, MaxPollingAttempts}),
-                    {noreply, NewState#{stories_requests => undefined}};
+                    {noreply, State2};
                 _ ->
                     ?LOG_DEBUG("~p stories still pending", [length(RemainingStoriesRequests)]),
-                    {noreply, NewState}
+                    {noreply, State1}
             end;
         false ->
             ?LOG_WARNING("Received response for unknown request: ~p", [RequestId]),
@@ -178,5 +183,8 @@ handle_top_stories_list(Body, TopN, HNApiItemURL) ->
 handle_story(SortingOrder, Body) ->
     Story = jsone:decode(Body),
     ?LOG_DEBUG("Received story: ~p~n", [Story]),
-    ok = hn_storage_handler:store_story(SortingOrder, Story),
-    ok.
+    {SortingOrder, Story}.
+
+handle_stories(#{stories := Stories} = State) ->
+    hn_storage_handler:store_stories(Stories),
+    State#{stories => [], stories_requests => undefined}.

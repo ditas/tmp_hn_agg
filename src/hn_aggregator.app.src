@@ -9,7 +9,8 @@
         sasl,
         inets,
         ssl,
-        jsone
+        jsone,
+        cowboy
     ]},
     {env, []},
     {modules, []},

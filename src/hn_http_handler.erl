@@ -1,0 +1,76 @@
+-module(hn_http_handler).
+
+-behaviour(cowboy_rest).
+
+-include_lib("kernel/include/logger.hrl").
+
+-export([
+    init/2,
+    allowed_methods/2,
+    content_types_provided/2,
+    is_authorized/2,
+    rate_limited/2
+]).
+
+-export([to_json/2]).
+
+%% Callbacks/API
+
+-spec init(cowboy_req:req(), any()) -> {cowboy_rest, cowboy_req:req(), map()}.
+init(Req, _Opts) ->
+    {ok, PageSize} = application:get_env(hn_aggregator, page_size),
+    {cowboy_rest, Req, #{page_size => PageSize}}.
+
+-spec allowed_methods(cowboy_req:req(), map()) -> {[binary()], cowboy_req:req(), map()}.
+allowed_methods(Req, State) ->
+    {[<<"GET">>], Req, State}.
+
+content_types_provided(Req, State) ->
+    {[{{<<"application">>, <<"json">>, '*'}, to_json}], Req, State}.
+
+is_authorized(Req, State) ->
+    {true, Req, State}.
+
+rate_limited(Req, State) ->
+    Resp =
+        case rand:uniform(100) < 50 of
+            true ->
+                {true, 5000};
+            false ->
+                false
+        end,
+    {Resp, Req, State}.
+
+-spec to_json(cowboy_req:req(), map()) -> {atom(), cowboy_req:req(), map()}.
+to_json(Req, State) ->
+    ?LOG_DEBUG("---------------State ~p", [State]),
+    Req1 = handle_request(Req, State),
+    {stop, Req1, State}.
+
+%% Internal
+
+handle_request(Req, #{page_size := PageSize}) ->
+    ?LOG_DEBUG("---------------Req Path ~p", [cowboy_req:path(Req)]),
+    ?LOG_DEBUG("---------------Req Bindings ~p", [cowboy_req:binding(id, Req)]),
+    ?LOG_DEBUG("---------------Req QS ~p", [cowboy_req:parse_qs(Req)]),
+
+    case cowboy_req:binding(id, Req) of
+        undefined ->
+            ?LOG_DEBUG("Request received for stories"),
+            Page = cowboy_req:parse_qs(Req),
+            PageNum = binary_to_integer(proplists:get_value(<<"page">>, Page, <<"1">>)),
+            ?LOG_DEBUG("---------------PageNum ~p", [PageNum]),
+            Stories = hn_storage_handler:read_stories(PageNum, PageSize),
+            Body = jsone:encode(Stories),
+            cowboy_req:reply(200, #{}, Body, Req);
+        Id ->
+            ?LOG_DEBUG("Request received for story ID: ~p", [Id]),
+            case hn_storage_handler:read_story_by_id(binary_to_integer(Id)) of
+                {ok, Story} ->
+                    ?LOG_DEBUG("Story found: ~p", [Story]),
+                    Body = jsone:encode(Story),
+                    cowboy_req:reply(200, #{}, Body, Req);
+                {error, not_found} ->
+                    cowboy_req:reply(404, #{}, <<"Story not found">>, Req)
+            end
+    end.
