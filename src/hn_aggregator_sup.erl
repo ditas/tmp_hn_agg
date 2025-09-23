@@ -33,6 +33,14 @@ init([]) ->
         },
     ChildSpecs = [
         #{
+            id => hn_storage_handler,
+            start => {hn_storage_handler, start_link, []},
+            restart => permanent,
+            shutdown => 5000,
+            type => worker,
+            modules => [hn_storage_handler]
+        },
+        #{
             id => hn_poller,
             start => {hn_poller, start_link, []},
             restart => permanent,
