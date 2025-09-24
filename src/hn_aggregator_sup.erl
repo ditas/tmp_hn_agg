@@ -47,6 +47,14 @@ init([]) ->
             shutdown => 5000,
             type => worker,
             modules => [hn_poller]
+        },
+        #{
+            id => hn_rate_limiter,
+            start => {hn_rate_limiter, start_link, []},
+            restart => permanent,
+            shutdown => 5000,
+            type => worker,
+            modules => [hn_rate_limiter]
         }
     ],
     {ok, {SupFlags, ChildSpecs}}.

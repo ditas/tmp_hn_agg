@@ -17,9 +17,13 @@
 %% Callbacks/API
 
 -spec init(cowboy_req:req(), any()) -> {cowboy_rest, cowboy_req:req(), map()}.
-init(Req, _Opts) ->
+init(Req, []) ->
     {ok, PageSize} = application:get_env(hn_aggregator, page_size),
-    {cowboy_rest, Req, #{page_size => PageSize}}.
+    {ok, MaxRequestsPerMinute} = application:get_env(hn_aggregator, max_requests_per_minute),
+    {cowboy_rest, Req, #{
+        page_size => PageSize,
+        max_requests_per_minute => MaxRequestsPerMinute
+    }}.
 
 -spec allowed_methods(cowboy_req:req(), map()) -> {[binary()], cowboy_req:req(), map()}.
 allowed_methods(Req, State) ->
@@ -31,15 +35,11 @@ content_types_provided(Req, State) ->
 is_authorized(Req, State) ->
     {true, Req, State}.
 
-rate_limited(Req, State) ->
-    Resp =
-        case rand:uniform(100) < 50 of
-            true ->
-                {true, 5000};
-            false ->
-                false
-        end,
-    {Resp, Req, State}.
+rate_limited(Req, #{max_requests_per_minute := MaxRequestsPerMinute} = State) ->
+    {IP, Port} = cowboy_req:peer(Req),
+    ?LOG_DEBUG("Peer IP: ~p, Port: ~p", [IP, Port]),
+    Res = hn_rate_limiter:check_rate_limit(IP, MaxRequestsPerMinute),
+    {Res, Req, State}.
 
 -spec to_json(cowboy_req:req(), map()) -> {atom(), cowboy_req:req(), map()}.
 to_json(Req, State) ->
