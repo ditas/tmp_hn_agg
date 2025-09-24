@@ -27,7 +27,7 @@ read_stories(PageNum, PageSize) ->
     Stories = ets:select(?DEFAULT_STORIES_TABLE, [
         {{'$1', '$2'}, [{'>', '$1', Offset}, {'=<', '$1', Range}], [{{'$1', '$2'}}]}
     ]),
-    [Story || {_, Story} <- Stories].
+    {ok, [Story || {_, Story} <- Stories]}.
 
 read_story_by_id(Id) ->
     case ets:lookup(?DEFAULT_SORTING_TABLE, Id) of

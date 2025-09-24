@@ -24,7 +24,7 @@ init([]) ->
     {ok, TopN} = application:get_env(hn_aggregator, top_n),
     {ok, MaxPollingAttempts} = application:get_env(hn_aggregator, max_polling_attempts),
     {ok, PollingBackOffMS} = application:get_env(hn_aggregator, polling_backoff_ms),
-    erlang:send_after(PollingRate, self(), {poll, MaxPollingAttempts}),
+    erlang:send(self(), {poll, MaxPollingAttempts}), %% Start polling immediately on init
     {ok, #{
         hn_api_base_url => HNApiBaseURL,
         hn_api_top_stories_path => HNApiTopStoriesPath,

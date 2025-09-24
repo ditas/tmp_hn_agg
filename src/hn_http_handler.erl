@@ -60,7 +60,7 @@ handle_request(Req, #{page_size := PageSize}) ->
             Page = cowboy_req:parse_qs(Req),
             PageNum = binary_to_integer(proplists:get_value(<<"page">>, Page, <<"1">>)),
             ?LOG_DEBUG("---------------PageNum ~p", [PageNum]),
-            Stories = hn_storage_handler:read_stories(PageNum, PageSize),
+            {ok, Stories} = hn_storage_handler:read_stories(PageNum, PageSize),
             Body = jsone:encode(Stories),
             cowboy_req:reply(200, #{}, Body, Req);
         Id ->
