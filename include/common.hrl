@@ -1,0 +1,1 @@
+-define(DEFAULT_WS_HANDLERS_PG_NAME, ws_handlers_pg).

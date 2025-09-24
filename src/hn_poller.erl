@@ -2,6 +2,7 @@
 
 -behaviour(gen_server).
 
+-include("common.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -export([start_link/0]).
@@ -24,7 +25,8 @@ init([]) ->
     {ok, TopN} = application:get_env(hn_aggregator, top_n),
     {ok, MaxPollingAttempts} = application:get_env(hn_aggregator, max_polling_attempts),
     {ok, PollingBackOffMS} = application:get_env(hn_aggregator, polling_backoff_ms),
-    erlang:send(self(), {poll, MaxPollingAttempts}), %% Start polling immediately on init
+    %% Start polling immediately on init
+    erlang:send(self(), {poll, MaxPollingAttempts}),
     {ok, #{
         hn_api_base_url => HNApiBaseURL,
         hn_api_top_stories_path => HNApiTopStoriesPath,
@@ -87,7 +89,6 @@ handle_info(
         top_n := TopN
     } = State
 ) ->
-    ?LOG_DEBUG("Received Top Stories List: ~p~n", [Body]),
     StoriesRequests = handle_top_stories_list(Body, TopN, HNApiBaseURL ++ "/" ++ HNApiItemPath),
     {noreply, State#{stories_requests => StoriesRequests}};
 handle_info(
@@ -108,7 +109,7 @@ handle_info(
             %% Only restart polling when ALL stories are fetched
             case RemainingStoriesRequests of
                 [] ->
-                    ?LOG_INFO("All stories fetched successfully. Starting new polling cycle."),
+                    ?LOG_DEBUG("All stories fetched successfully. Starting new polling cycle."),
                     State2 = handle_stories(State1),
                     erlang:send_after(PollingRate, self(), {poll, MaxPollingAttempts}),
                     {noreply, State2};
@@ -121,7 +122,8 @@ handle_info(
             {noreply, State}
     end;
 handle_info(
-    {http, {_RequestId, {{_, Status, _}, _Headers, _Body}}},
+    % {http, {_RequestId, {{_, Status, _}, _Headers, _Body}}},
+    {http, {_RequestId, Error}},
     #{
         max_polling_attempts := MaxPollingAttempts,
         polling_rate_ms := PollingRate,
@@ -129,8 +131,8 @@ handle_info(
         used_polling_attempts := UsedPollingAttempts
     } = State
 ) ->
-    {RemainingAttempts, IncreasedPollingRate} = handle_unsuccessful_response_status(
-        Status, MaxPollingAttempts, UsedPollingAttempts, PollingRate, PollingBackOffMS
+    {RemainingAttempts, IncreasedPollingRate} = handle_failed_request(
+        Error, MaxPollingAttempts, UsedPollingAttempts, PollingRate, PollingBackOffMS
     ),
     %% Restart polling cycle if either of the requests failed (top stories or individual story)
     erlang:send_after(IncreasedPollingRate, self(), {poll, RemainingAttempts}),
@@ -139,9 +141,7 @@ handle_info(
         stories_requests => undefined,
         used_polling_attempts => UsedPollingAttempts + 1,
         polling_rate_ms => IncreasedPollingRate
-    }};
-handle_info(_Info, State) ->
-    {noreply, State}.
+    }}.
 
 terminate(_Reason, _State) ->
     ok.
@@ -149,18 +149,18 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-handle_unsuccessful_response_status(
-    Status, MaxPollingAttempts, UsedPollingAttempts, PollingRate0, PollingBackOffMS
+handle_failed_request(
+    Error, MaxPollingAttempts, UsedPollingAttempts, PollingRate0, PollingBackOffMS
 ) ->
-    %% TODO: Implement backoff strategy based on status code
-    ?LOG_WARNING("Received unsuccessful HTTP status: ~p~n", [Status]),
+    ?LOG_WARNING("Request failed with: ~p~n", [Error]),
     RemainingAttempts = MaxPollingAttempts - UsedPollingAttempts - 1,
-    PollingRate = PollingRate0 + PollingBackOffMS,
+    PollingRate = PollingRate0 + (PollingBackOffMS * (MaxPollingAttempts - RemainingAttempts)),
     {RemainingAttempts, PollingRate}.
 
 handle_top_stories_list(Body, TopN, HNApiItemURL) ->
     TopStoriesIdsTotal = jsone:decode(Body),
     {TopStoriesIds, _} = lists:split(TopN, TopStoriesIdsTotal),
+    ?LOG_DEBUG("Received Top Stories List ~p", [TopStoriesIds]),
     {_, StoriesRequests} = lists:foldl(
         fun(Id, {SortingOrder0, Acc}) ->
             ?LOG_DEBUG("Processing item ID: ~p~n", [Id]),
@@ -186,5 +186,11 @@ handle_story(SortingOrder, Body) ->
     {SortingOrder, Story}.
 
 handle_stories(#{stories := Stories} = State) ->
+    notify_ws_handlers(),
     hn_storage_handler:store_stories(Stories),
     State#{stories => [], stories_requests => undefined}.
+
+notify_ws_handlers() ->
+    Members = pg:get_members(?DEFAULT_WS_HANDLERS_PG_NAME),
+    ?LOG_DEBUG("Notifying ~p websocket handlers", [Members]),
+    [Pid ! stories_updated || Pid <- Members].

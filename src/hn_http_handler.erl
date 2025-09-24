@@ -43,23 +43,17 @@ rate_limited(Req, #{max_requests_per_minute := MaxRequestsPerMinute} = State) ->
 
 -spec to_json(cowboy_req:req(), map()) -> {atom(), cowboy_req:req(), map()}.
 to_json(Req, State) ->
-    ?LOG_DEBUG("---------------State ~p", [State]),
     Req1 = handle_request(Req, State),
     {stop, Req1, State}.
 
 %% Internal
 
 handle_request(Req, #{page_size := PageSize}) ->
-    ?LOG_DEBUG("---------------Req Path ~p", [cowboy_req:path(Req)]),
-    ?LOG_DEBUG("---------------Req Bindings ~p", [cowboy_req:binding(id, Req)]),
-    ?LOG_DEBUG("---------------Req QS ~p", [cowboy_req:parse_qs(Req)]),
-
     case cowboy_req:binding(id, Req) of
         undefined ->
             ?LOG_DEBUG("Request received for stories"),
             Page = cowboy_req:parse_qs(Req),
             PageNum = binary_to_integer(proplists:get_value(<<"page">>, Page, <<"1">>)),
-            ?LOG_DEBUG("---------------PageNum ~p", [PageNum]),
             {ok, Stories} = hn_storage_handler:read_stories(PageNum, PageSize),
             Body = jsone:encode(Stories),
             cowboy_req:reply(200, #{}, Body, Req);
