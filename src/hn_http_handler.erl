@@ -29,12 +29,16 @@ init(Req, []) ->
 allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
+-spec content_types_provided(cowboy_req:req(), map()) ->
+    {[{{binary(), binary(), '*'}, atom()}], cowboy_req:req(), map()}.
 content_types_provided(Req, State) ->
     {[{{<<"application">>, <<"json">>, '*'}, to_json}], Req, State}.
 
+-spec is_authorized(cowboy_req:req(), map()) -> {boolean(), cowboy_req:req(), map()}.
 is_authorized(Req, State) ->
     {true, Req, State}.
 
+-spec rate_limited(cowboy_req:req(), map()) -> {boolean(), cowboy_req:req(), map()}.
 rate_limited(Req, #{max_requests_per_minute := MaxRequestsPerMinute} = State) ->
     {IP, Port} = cowboy_req:peer(Req),
     ?LOG_DEBUG("Peer IP: ~p, Port: ~p", [IP, Port]),
@@ -48,6 +52,7 @@ to_json(Req, State) ->
 
 %% Internal
 
+-spec handle_request(cowboy_req:req(), map()) -> cowboy_req:req().
 handle_request(Req, #{page_size := PageSize}) ->
     case cowboy_req:binding(id, Req) of
         undefined ->

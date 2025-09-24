@@ -12,6 +12,7 @@
 
 -define(SERVER, ?MODULE).
 
+-spec start_link() -> {ok, pid()} | {error, any()}.
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
@@ -24,12 +25,13 @@ start_link() ->
 %%                  shutdown => shutdown(), % optional
 %%                  type => worker(),       % optional
 %%                  modules => modules()}   % optional
+-spec init([]) -> {ok, {#{intensity := 3, period := 10, strategy := one_for_one}, [map(), ...]}}.
 init([]) ->
     SupFlags =
         #{
             strategy => one_for_one,
-            intensity => 0,
-            period => 1
+            intensity => 3,
+            period => 10
         },
     ChildSpecs = [
         #{

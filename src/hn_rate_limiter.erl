@@ -10,14 +10,18 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+-type state() :: map().
+
 -define(DEFAULT_RATE_LIMIT_TABLE, rate_limit).
 %% 1 minute
 -define(DEFAULT_RATE_LIMIT_TIMEOUT_MS, 60000).
 
+-spec start_link() -> {ok, pid()} | {error, term()}.
 start_link() ->
     erlang:send_after(?DEFAULT_RATE_LIMIT_TIMEOUT_MS, ?MODULE, cleanup),
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+-spec check_rate_limit(inet:ip_address(), non_neg_integer()) -> false | {true, non_neg_integer()}.
 check_rate_limit(IP, MaxRequestsPerMinute) ->
     Minute = erlang:system_time(second) div 60,
     Count =
@@ -38,16 +42,20 @@ check_rate_limit(IP, MaxRequestsPerMinute) ->
             {true, SecondsLeft * 1000}
     end.
 
+-spec init([]) -> {ok, #{}}.
 init([]) ->
     _ = ets:new(?DEFAULT_RATE_LIMIT_TABLE, [named_table, public]),
     {ok, #{}}.
 
+-spec handle_call(any(), any(), state()) -> {reply, ok, state()}.
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
+-spec handle_cast(any(), state()) -> {noreply, state()}.
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+-spec handle_info(any(), state()) -> {noreply, state()}.
 handle_info(cleanup, State) ->
     Minute = erlang:system_time(second) div 60,
     ets:select_delete(?DEFAULT_RATE_LIMIT_TABLE, [
@@ -57,8 +65,10 @@ handle_info(cleanup, State) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
+-spec terminate(any(), state()) -> ok.
 terminate(_Reason, _State) ->
     ok.
 
+-spec code_change(any(), state(), any()) -> {ok, state()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.

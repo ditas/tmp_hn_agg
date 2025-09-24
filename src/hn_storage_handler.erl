@@ -14,13 +14,18 @@
 -define(DEFAULT_STORIES_TABLE, stories).
 -define(DEFAULT_SORTING_TABLE, sorting).
 
+-type state() :: map().
+
 %% API
+-spec start_link() -> {ok, pid()} | {error, term()}.
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+-spec store_stories(list()) -> ok.
 store_stories(Stories) ->
     gen_server:cast(?MODULE, {store_stories, Stories}).
 
+-spec read_stories(non_neg_integer(), pos_integer()) -> {ok, list()}.
 read_stories(PageNum, PageSize) ->
     Offset = (PageNum - 1) * PageSize,
     Range = Offset + PageSize,
@@ -29,6 +34,7 @@ read_stories(PageNum, PageSize) ->
     ]),
     {ok, [Story || {_, Story} <- Stories]}.
 
+-spec read_story_by_id(pos_integer()) -> {ok, map()} | {error, term()}.
 read_story_by_id(Id) ->
     case ets:lookup(?DEFAULT_SORTING_TABLE, Id) of
         [] ->
@@ -40,14 +46,17 @@ read_story_by_id(Id) ->
             end
     end.
 
+-spec init([]) -> {ok, #{}}.
 init([]) ->
     ok = create_story_table(),
     ok = create_sorting_table(),
     {ok, #{}}.
 
+-spec handle_call(any(), any(), state()) -> {reply, any(), state()}.
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
+-spec handle_cast(any(), state()) -> {noreply, state()}.
 handle_cast({store_stories, Stories}, State) ->
     ?LOG_DEBUG("Storing stories: ~p", [Stories]),
     true = ets:insert(?DEFAULT_STORIES_TABLE, Stories),
@@ -64,12 +73,15 @@ handle_cast({store_stories, Stories}, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+-spec handle_info(any(), state()) -> {noreply, state()}.
 handle_info(_Info, State) ->
     {noreply, State}.
 
+-spec terminate(any(), state()) -> ok.
 terminate(_Reason, _State) ->
     ok.
 
+-spec code_change(any(), state(), any()) -> {ok, state()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 

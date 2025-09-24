@@ -9,6 +9,7 @@
 
 -export([start/2, stop/1]).
 
+-spec start(any(), any()) -> {ok, pid()} | {error, any()}.
 start(_StartType, _StartArgs) ->
     Dispatch = cowboy_router:compile([
         {'_', [
@@ -24,6 +25,7 @@ start(_StartType, _StartArgs) ->
     ),
     hn_aggregator_sup:start_link().
 
+-spec stop(any()) -> ok.
 stop(_State) ->
     ok.
 

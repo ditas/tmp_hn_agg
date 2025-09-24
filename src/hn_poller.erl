@@ -11,12 +11,28 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+-type state() :: #{
+    hn_api_base_url := string(),
+    hn_api_top_stories_path := string(),
+    hn_api_item_path := string(),
+    polling_rate_ms := pos_integer(),
+    top_n := pos_integer(),
+    max_polling_attempts := pos_integer(),
+    used_polling_attempts := non_neg_integer(),
+    polling_backoff_ms := pos_integer(),
+    stories := [map()],
+    stories_requests := [tuple()] | undefined
+}.
+
+-spec start_link() -> {ok, pid()} | {error, term()}.
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+-spec restart_polling() -> ok.
 restart_polling() ->
     gen_server:cast(?MODULE, restart).
 
+-spec init([]) -> {ok, state()}.
 init([]) ->
     {ok, HNApiBaseURL} = application:get_env(hn_aggregator, hn_api_base_url),
     {ok, HNApiTopStoriesPath} = application:get_env(hn_aggregator, hn_api_top_stories_path),
@@ -36,12 +52,15 @@ init([]) ->
         max_polling_attempts => MaxPollingAttempts,
         used_polling_attempts => 0,
         polling_backoff_ms => PollingBackOffMS,
-        stories => []
+        stories => [],
+        stories_requests => undefined
     }}.
 
+-spec handle_call(any(), any(), state()) -> {reply, any(), state()}.
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
+-spec handle_cast(any(), state()) -> {noreply, state()}.
 handle_cast(
     restart, #{max_polling_attempts := MaxPollingAttempts, polling_rate_ms := PollingRate} = State
 ) ->
@@ -50,6 +69,7 @@ handle_cast(
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+-spec handle_info(any(), state()) -> {noreply, state()}.
 handle_info(
     {poll, RemainingAttempts},
     #{
@@ -143,12 +163,17 @@ handle_info(
         polling_rate_ms => IncreasedPollingRate
     }}.
 
+-spec terminate(any(), state()) -> ok.
 terminate(_Reason, _State) ->
     ok.
 
+-spec code_change(any(), state(), any()) -> {ok, state()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+-spec handle_failed_request(
+    any(), pos_integer(), non_neg_integer(), pos_integer(), pos_integer()
+) -> {non_neg_integer(), pos_integer()}.
 handle_failed_request(
     Error, MaxPollingAttempts, UsedPollingAttempts, PollingRate0, PollingBackOffMS
 ) ->
@@ -157,6 +182,8 @@ handle_failed_request(
     PollingRate = PollingRate0 + (PollingBackOffMS * (MaxPollingAttempts - RemainingAttempts)),
     {RemainingAttempts, PollingRate}.
 
+-spec handle_top_stories_list(binary(), pos_integer(), string()) ->
+    [{pos_integer(), reference()}].
 handle_top_stories_list(Body, TopN, HNApiItemURL) ->
     TopStoriesIdsTotal = jsone:decode(Body),
     {TopStoriesIds, _} = lists:split(TopN, TopStoriesIdsTotal),
@@ -180,16 +207,19 @@ handle_top_stories_list(Body, TopN, HNApiItemURL) ->
     ),
     StoriesRequests.
 
-handle_story(SortingOrder, Body) ->
+-spec handle_story(binary(), pos_integer()) -> {pos_integer(), map()}.
+handle_story(Body, SortingOrder) ->
     Story = jsone:decode(Body),
     ?LOG_DEBUG("Received story: ~p~n", [Story]),
     {SortingOrder, Story}.
 
+-spec handle_stories(state()) -> state().
 handle_stories(#{stories := Stories} = State) ->
-    notify_ws_handlers(),
+    _ = notify_ws_handlers(),
     hn_storage_handler:store_stories(Stories),
     State#{stories => [], stories_requests => undefined}.
 
+-spec notify_ws_handlers() -> [stories_updated].
 notify_ws_handlers() ->
     Members = pg:get_members(?DEFAULT_WS_HANDLERS_PG_NAME),
     ?LOG_DEBUG("Notifying ~p websocket handlers", [Members]),

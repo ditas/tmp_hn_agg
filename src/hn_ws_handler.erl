@@ -12,27 +12,32 @@
 -define(DEFAULT_WS_PAGE_NUM, 1).
 -define(DEFAULT_IDLE_TIMEOUT_MS, 60000).
 
+-spec init(cowboy_req:req(), map()) -> {cowboy_websocket, cowboy_req:req(), map(), map()}.
 init(Req, _Opts) ->
     {cowboy_websocket, Req, #{}, #{idle_timeout => ?DEFAULT_IDLE_TIMEOUT_MS}}.
 
+-spec websocket_init(map()) -> {[{text, binary()}], map()}.
 websocket_init(State) ->
     ok = pg:join(?DEFAULT_WS_HANDLERS_PG_NAME, self()),
     {ok, Stories} = hn_storage_handler:read_stories(?DEFAULT_WS_PAGE_NUM, ?DEFAULT_WS_PAGE_SIZE),
     Body = jsone:encode(Stories),
     {[{text, Body}], State}.
 
+-spec websocket_handle(ping | pong | {text | binary | ping | pong, binary()}, map()) -> {ok, map()}.
 websocket_handle(Data, State) ->
-    ?LOG_DEBUG("----------------------Received something from client ~p", [Data]),
+    ?LOG_DEBUG("Received msg from client ~p", [Data]),
     {ok, State}.
 
+-spec websocket_info(stories_updated, map()) -> {ok, map()} | {[{text, binary()}], map()}.
 websocket_info(stories_updated, State) ->
-    ?LOG_DEBUG("----------------------Received update ~p"),
+    ?LOG_DEBUG("Received update ~p"),
     {ok, Stories} = hn_storage_handler:read_stories(?DEFAULT_WS_PAGE_NUM, ?DEFAULT_WS_PAGE_SIZE),
     Body = jsone:encode(Stories),
     {[{text, Body}], State};
 websocket_info(_Info, State) ->
     {ok, State}.
 
+-spec terminate(_Reason, _Req, _State) -> ok.
 terminate(_Reason, _Req, _State) ->
     ok.
 
