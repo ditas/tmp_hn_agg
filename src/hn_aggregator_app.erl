@@ -11,6 +11,7 @@
 
 -spec start(any(), any()) -> {ok, pid()} | {error, any()}.
 start(_StartType, _StartArgs) ->
+    {ok, Port} = application:get_env(hn_aggregator, port),
     Dispatch = cowboy_router:compile([
         {'_', [
             {"/stories", hn_http_handler, []},
@@ -20,7 +21,7 @@ start(_StartType, _StartArgs) ->
     ]),
     {ok, _} = cowboy:start_clear(
         http_listener,
-        [{port, 8080}],
+        [{port, Port}],
         #{env => #{dispatch => Dispatch}}
     ),
     hn_aggregator_sup:start_link().
