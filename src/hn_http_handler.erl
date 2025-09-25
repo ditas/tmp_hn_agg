@@ -42,7 +42,13 @@ is_authorized(Req, State) ->
 rate_limited(Req, #{max_requests_per_minute := MaxRequestsPerMinute} = State) ->
     {IP, Port} = cowboy_req:peer(Req),
     ?LOG_DEBUG("Peer IP: ~p, Port: ~p", [IP, Port]),
-    Res = hn_rate_limiter:check_rate_limit(IP, MaxRequestsPerMinute),
+    Res =
+        case hn_rate_limiter:check_rate_limit(IP, MaxRequestsPerMinute) of
+            allow ->
+                false;
+            {disallow, RetryAfter} ->
+                {true, RetryAfter}
+        end,
     {Res, Req, State}.
 
 -spec to_json(cowboy_req:req(), map()) -> {atom(), cowboy_req:req(), map()}.

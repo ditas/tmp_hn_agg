@@ -21,7 +21,8 @@ start_link() ->
     erlang:send_after(?DEFAULT_RATE_LIMIT_TIMEOUT_MS, ?MODULE, cleanup),
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
--spec check_rate_limit(inet:ip_address(), non_neg_integer()) -> false | {true, non_neg_integer()}.
+-spec check_rate_limit(inet:ip_address(), non_neg_integer()) ->
+    allow | {disallow, non_neg_integer()}.
 check_rate_limit(IP, MaxRequestsPerMinute) ->
     Minute = erlang:system_time(second) div 60,
     Count =
@@ -36,10 +37,10 @@ check_rate_limit(IP, MaxRequestsPerMinute) ->
     ?LOG_DEBUG("Rate limit count for ~p: ~p", [{IP, Minute}, NewCount]),
     case NewCount =< MaxRequestsPerMinute of
         true ->
-            false;
+            allow;
         false ->
             SecondsLeft = 60 - (erlang:system_time(second) rem 60),
-            {true, SecondsLeft * 1000}
+            {disallow, SecondsLeft}
     end.
 
 -spec init([]) -> {ok, #{}}.
