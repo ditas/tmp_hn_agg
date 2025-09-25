@@ -19,10 +19,10 @@
 -spec init(cowboy_req:req(), any()) -> {cowboy_rest, cowboy_req:req(), map()}.
 init(Req, []) ->
     {ok, PageSize} = application:get_env(hn_aggregator, page_size),
-    {ok, MaxRequestsPerMinute} = application:get_env(hn_aggregator, max_requests_per_minute),
+    {ok, MaxRequests} = application:get_env(hn_aggregator, max_http_requests),
     {cowboy_rest, Req, #{
         page_size => PageSize,
-        max_requests_per_minute => MaxRequestsPerMinute
+        max_requests => MaxRequests
     }}.
 
 -spec allowed_methods(cowboy_req:req(), map()) -> {[binary()], cowboy_req:req(), map()}.
@@ -39,11 +39,11 @@ is_authorized(Req, State) ->
     {true, Req, State}.
 
 -spec rate_limited(cowboy_req:req(), map()) -> {boolean(), cowboy_req:req(), map()}.
-rate_limited(Req, #{max_requests_per_minute := MaxRequestsPerMinute} = State) ->
+rate_limited(Req, #{max_requests := MaxRequests} = State) ->
     {IP, Port} = cowboy_req:peer(Req),
     ?LOG_DEBUG("Peer IP: ~p, Port: ~p", [IP, Port]),
     Res =
-        case hn_rate_limiter:check_rate_limit(IP, MaxRequestsPerMinute) of
+        case hn_rate_limiter:check_connection_rate_limit(IP, MaxRequests) of
             allow ->
                 false;
             {disallow, RetryAfter} ->

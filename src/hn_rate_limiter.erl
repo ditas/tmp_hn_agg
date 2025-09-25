@@ -6,47 +6,49 @@
 
 -export([start_link/0]).
 
--export([check_rate_limit/2]).
+-export([check_connection_rate_limit/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--type state() :: map().
+-type state() :: #{rate_limit_cleanup_timeout_ms := non_neg_integer()}.
 
--define(DEFAULT_RATE_LIMIT_TABLE, rate_limit).
-%% 1 minute
--define(DEFAULT_RATE_LIMIT_TIMEOUT_MS, 60000).
+-define(RATE_LIMIT_TABLE, rate_limit).
+-define(DEFAULT_TIME_WINDOW_SEC, 60).
 
 -spec start_link() -> {ok, pid()} | {error, term()}.
 start_link() ->
-    erlang:send_after(?DEFAULT_RATE_LIMIT_TIMEOUT_MS, ?MODULE, cleanup),
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
--spec check_rate_limit(inet:ip_address(), non_neg_integer()) ->
+-spec check_connection_rate_limit(inet:ip_address(), non_neg_integer()) ->
     allow | {disallow, non_neg_integer()}.
-check_rate_limit(IP, MaxRequestsPerMinute) ->
-    Minute = erlang:system_time(second) div 60,
-    Count =
-        case ets:lookup(?DEFAULT_RATE_LIMIT_TABLE, {IP, Minute}) of
-            [] ->
-                0;
-            [{_, C}] ->
-                C
+check_connection_rate_limit(IP, MaxRequests) ->
+    TimeWindow = erlang:system_time(second) div ?DEFAULT_TIME_WINDOW_SEC,
+    Count0 =
+        case ets:lookup(?RATE_LIMIT_TABLE, {IP, TimeWindow}) of
+            [] -> 0;
+            [{_, C}] -> C
         end,
-    NewCount = Count + 1,
-    ets:insert(?DEFAULT_RATE_LIMIT_TABLE, {{IP, Minute}, NewCount}),
-    ?LOG_DEBUG("Rate limit count for ~p: ~p", [{IP, Minute}, NewCount]),
-    case NewCount =< MaxRequestsPerMinute of
+    Count = Count0 + 1,
+    ets:insert(?RATE_LIMIT_TABLE, {{IP, TimeWindow}, Count}),
+    ?LOG_DEBUG("Rate limit count for ~p: ~p", [{IP, TimeWindow}, Count]),
+    case Count =< MaxRequests of
         true ->
             allow;
         false ->
-            SecondsLeft = 60 - (erlang:system_time(second) rem 60),
+            SecondsLeft =
+                ?DEFAULT_TIME_WINDOW_SEC -
+                    (erlang:system_time(second) rem ?DEFAULT_TIME_WINDOW_SEC),
             {disallow, SecondsLeft}
     end.
 
--spec init([]) -> {ok, #{}}.
+-spec init([]) -> {ok, state()}.
 init([]) ->
-    _ = ets:new(?DEFAULT_RATE_LIMIT_TABLE, [named_table, public]),
-    {ok, #{}}.
+    _ = ets:new(?RATE_LIMIT_TABLE, [named_table, public]),
+    {ok, RateLimitCleanupTimeout} = application:get_env(
+        hn_aggregator, rate_limit_cleanup_timeout_ms
+    ),
+    erlang:send_after(RateLimitCleanupTimeout, ?MODULE, cleanup),
+    {ok, #{rate_limit_cleanup_timeout_ms => RateLimitCleanupTimeout}}.
 
 -spec handle_call(any(), any(), state()) -> {reply, ok, state()}.
 handle_call(_Request, _From, State) ->
@@ -57,11 +59,12 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 -spec handle_info(any(), state()) -> {noreply, state()}.
-handle_info(cleanup, State) ->
-    Minute = erlang:system_time(second) div 60,
-    ets:select_delete(?DEFAULT_RATE_LIMIT_TABLE, [
-        {{{'_', '$1'}, '_'}, [{'<', '$1', Minute}], [true]}
+handle_info(cleanup, #{rate_limit_cleanup_timeout_ms := RateLimitCleanupTimeout} = State) ->
+    TimeWindow = erlang:system_time(second) div ?DEFAULT_TIME_WINDOW_SEC,
+    ets:select_delete(?RATE_LIMIT_TABLE, [
+        {{{'_', '$1'}, '_'}, [{'<', '$1', TimeWindow}], [true]}
     ]),
+    erlang:send_after(RateLimitCleanupTimeout, ?MODULE, cleanup),
     {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.

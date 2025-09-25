@@ -123,7 +123,7 @@ handle_info(
     case lists:keytake(RequestId, 2, StoriesRequests) of
         {value, {SortingOrder, _RequestId}, RemainingStoriesRequests} ->
             State1 = State#{
-                stories => [handle_story(SortingOrder, Body) | Stories],
+                stories => [handle_story(Body, SortingOrder) | Stories],
                 stories_requests => RemainingStoriesRequests
             },
             %% Only restart polling when ALL stories are fetched
