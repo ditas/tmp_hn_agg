@@ -4,7 +4,7 @@
     {hn_api_base_url, "http://localhost:9998/v0"},
     {hn_api_top_stories_path, "topstories.json"},
     {hn_api_item_path, "item"},
-    {polling_rate_ms, 10000},
+    {polling_rate_ms, 5000},
     {top_n, 5},
     {max_polling_attempts, 3},
     {polling_backoff_ms, 1000},

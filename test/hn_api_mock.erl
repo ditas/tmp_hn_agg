@@ -6,11 +6,6 @@
 ]).
 
 start(HNApiMockPort) ->
-
-    %% -----------------------------EXPERIMENTAL-----------------------------
-    SettingsTable = ets:new(hn_api_mock_settings, [named_table, public]),
-    %% -----------------------------/-----------------------------
-
     {ok, _} = application:ensure_all_started([ranch, cowboy]),
 
     Dispatch = cowboy_router:compile([
@@ -20,7 +15,7 @@ start(HNApiMockPort) ->
         ]}
     ]),
     {ok, _} = cowboy:start_clear(
-        http_mock,
+        hn_api_mock_http,
         [{port, HNApiMockPort}],
         #{env => #{dispatch => Dispatch}}
     ),

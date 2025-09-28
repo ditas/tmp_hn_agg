@@ -81,3 +81,6 @@
         <<"type">> => <<"story">>,
         <<"url">> => <<"https://test5.com">>
     }).
+
+-define(HN_API_MOCK_DELAY_KEY, hn_api_mock_delay).
+-define(HN_API_MOCK_NOT_FOUND_STORY_ID_KEY, hn_api_mock_not_found_story_id).

@@ -9,6 +9,9 @@
 -export([store_stories/1]).
 -export([read_stories/2, read_story_by_id/1]).
 
+%% Debug
+-export([clear_cache/0, read_all_stories/0]).
+
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -define(STORIES_TABLE, stories).
@@ -70,6 +73,10 @@ handle_cast({store_stories, Stories}, State) ->
     ?LOG_DEBUG("Storing id-to-order mappings: ~p", [IdsOrders]),
     true = ets:insert(?SORTING_TABLE, IdsOrders),
     {noreply, State};
+handle_cast(clear_cache, State) ->
+    true = ets:delete_all_objects(?STORIES_TABLE),
+    true = ets:delete_all_objects(?SORTING_TABLE),
+    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -84,6 +91,12 @@ terminate(_Reason, _State) ->
 -spec code_change(any(), state(), any()) -> {ok, state()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+clear_cache() ->
+    gen_server:cast(?MODULE, clear_cache).
+
+read_all_stories() ->
+    ets:tab2list(?STORIES_TABLE).
 
 %% Internal
 

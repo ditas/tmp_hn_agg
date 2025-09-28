@@ -62,10 +62,10 @@ handle_call(_Request, _From, State) ->
 
 -spec handle_cast(any(), state()) -> {noreply, state()}.
 handle_cast(
-    restart, #{max_polling_attempts := MaxPollingAttempts, polling_rate_ms := PollingRate} = State
+    restart, #{max_polling_attempts := MaxPollingAttempts} = State
 ) ->
-    erlang:send_after(PollingRate, self(), {poll, MaxPollingAttempts}),
-    {noreply, State};
+    erlang:send(self(), {poll, MaxPollingAttempts}),
+    {noreply, State#{used_polling_attempts => 0, stories_requests => [], top_request_id => undefined}};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -95,7 +95,7 @@ handle_info(
                 ?LOG_WARNING("Max polling attempts reached. Stopping polling."),
                 State0#{
                     top_request_id => undefined,
-                    stories_requests => undefined,
+                    stories_requests => [],
                     used_polling_attempts => 0
                 }
         end,
@@ -109,6 +109,7 @@ handle_info(
         top_n := TopN
     } = State
 ) ->
+    ?LOG_WARNING("----------Success Top Stories Request ~p-----------Body ~p", [RequestId, Body]),
     StoriesRequests = handle_top_stories_list(Body, TopN, HNApiBaseURL ++ "/" ++ HNApiItemPath),
     {noreply, State#{stories_requests => StoriesRequests}};
 handle_info(
@@ -120,7 +121,7 @@ handle_info(
         stories := Stories
     } = State
 ) ->
-    ?LOG_WARNING("---------------------Body ~p", [Body]),
+    ?LOG_WARNING("----------Success Story Request ~p-----------Body ~p", [RequestId, Body]),
     case lists:keytake(RequestId, 2, StoriesRequests) of
         {value, {SortingOrder, _RequestId}, RemainingStoriesRequests} ->
             State1 = State#{
@@ -151,6 +152,7 @@ handle_info(
         used_polling_attempts := UsedPollingAttempts
     } = State
 ) ->
+    ?LOG_WARNING("Received error response: ~p", [Error]),
     {RemainingAttempts, IncreasedPollingRate} = handle_failed_request(
         Error, MaxPollingAttempts, UsedPollingAttempts, PollingRate, PollingBackOffMS
     ),
@@ -158,7 +160,7 @@ handle_info(
     erlang:send_after(IncreasedPollingRate, self(), {poll, RemainingAttempts}),
     {noreply, State#{
         top_request_id => undefined,
-        stories_requests => undefined,
+        stories_requests => [],
         used_polling_attempts => UsedPollingAttempts + 1,
         polling_rate_ms => IncreasedPollingRate
     }}.
@@ -177,8 +179,8 @@ code_change(_OldVsn, State, _Extra) ->
 handle_failed_request(
     Error, MaxPollingAttempts, UsedPollingAttempts, PollingRate0, PollingBackOffMS
 ) ->
-    ?LOG_WARNING("Request failed with: ~p~n", [Error]),
     RemainingAttempts = MaxPollingAttempts - UsedPollingAttempts - 1,
+    ?LOG_WARNING("Request failed with: ~p; Attempts remains: ~p~n", [Error, RemainingAttempts]),
     PollingRate = PollingRate0 + (PollingBackOffMS * (MaxPollingAttempts - RemainingAttempts)),
     {RemainingAttempts, PollingRate}.
 
@@ -217,7 +219,7 @@ handle_story(Body, SortingOrder) ->
 handle_stories(#{stories := Stories} = State) ->
     _ = notify_ws_handlers(),
     hn_storage_handler:store_stories(Stories),
-    State#{stories => [], stories_requests => undefined}.
+    State#{stories => [], stories_requests => []}.
 
 -spec notify_ws_handlers() -> [stories_updated].
 notify_ws_handlers() ->

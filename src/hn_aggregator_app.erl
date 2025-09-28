@@ -20,7 +20,7 @@ start(_StartType, _StartArgs) ->
         ]}
     ]),
     {ok, _} = cowboy:start_clear(
-        http_listener,
+        hn_aggregator_http,
         [{port, Port}],
         #{env => #{dispatch => Dispatch}}
     ),
