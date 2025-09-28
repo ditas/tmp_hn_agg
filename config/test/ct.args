@@ -1,7 +1,3 @@
-{applications, [
-    hn_aggregator
-]}.
-
 {hn_aggregator, [
     {port, 9999},
 
