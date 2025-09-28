@@ -79,9 +79,6 @@ handle_info(
 ) ->
     ?LOG_DEBUG("State on Poll ~p", [State0]),
     ?LOG_DEBUG("Remaining attempts ~p", [RemainingAttempts]),
-
-    ct:pal("======================POLLING State0~p", [State0]),
-
     State =
         case RemainingAttempts > 0 of
             true ->
@@ -123,6 +120,7 @@ handle_info(
         stories := Stories
     } = State
 ) ->
+    ?LOG_WARNING("---------------------Body ~p", [Body]),
     case lists:keytake(RequestId, 2, StoriesRequests) of
         {value, {SortingOrder, _RequestId}, RemainingStoriesRequests} ->
             State1 = State#{
@@ -145,7 +143,6 @@ handle_info(
             {noreply, State}
     end;
 handle_info(
-    % {http, {_RequestId, {{_, Status, _}, _Headers, _Body}}},
     {http, {_RequestId, Error}},
     #{
         max_polling_attempts := MaxPollingAttempts,

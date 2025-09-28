@@ -5,7 +5,7 @@
     {hn_api_top_stories_path, "topstories.json"},
     {hn_api_item_path, "item"},
     {polling_rate_ms, 10000},
-    {top_n, 3},
+    {top_n, 5},
     {max_polling_attempts, 3},
     {polling_backoff_ms, 1000},
     {page_size, 2},
