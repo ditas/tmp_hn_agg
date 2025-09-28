@@ -99,10 +99,11 @@ poll_top_stories_timeout(_Config) ->
     ?assert([] =:= Stories).
 
 poll_story_not_found(_Config) ->
-    timer:sleep(30000),
+    timer:sleep(10000),
     Stories = hn_storage_handler:read_all_stories(),
     ct:pal("=======poll_story_not_found===== Stories ~p", [Stories]),
-    ?assert([] =:= Stories).
+    ExpectedStories = lists:filter(fun(#{<<"id">> := Id}) -> Id =/= 456 end, ?STORIES),
+    ?assert(ExpectedStories =:= Stories).
 
 %% Internal
 
