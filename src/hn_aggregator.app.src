@@ -11,6 +11,7 @@
         ssl,
         jsone,
         cowboy,
+        %% to provide better observability
         observer
     ]},
     {env, []},

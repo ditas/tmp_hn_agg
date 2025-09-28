@@ -9,7 +9,7 @@
 -export([store_stories/1]).
 -export([read_stories/2, read_story_by_id/1]).
 
-%% Debug
+%% Debug API
 -export([clear_cache/0, read_all_stories/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -48,6 +48,15 @@ read_story_by_id(Id) ->
                 [{_, Story}] -> {ok, Story}
             end
     end.
+
+-spec clear_cache() -> ok.
+clear_cache() ->
+    gen_server:cast(?MODULE, clear_cache).
+
+-spec read_all_stories() -> [{pos_integer(), map()}].
+read_all_stories() ->
+    Data = ets:tab2list(?STORIES_TABLE),
+    [Story || {_Order, Story} <- Data].
 
 -spec init([]) -> {ok, #{}}.
 init([]) ->
@@ -91,13 +100,6 @@ terminate(_Reason, _State) ->
 -spec code_change(any(), state(), any()) -> {ok, state()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-clear_cache() ->
-    gen_server:cast(?MODULE, clear_cache).
-
-read_all_stories() ->
-    Data = ets:tab2list(?STORIES_TABLE),
-    [Story || {_Order, Story} <- Data].
 
 %% Internal
 

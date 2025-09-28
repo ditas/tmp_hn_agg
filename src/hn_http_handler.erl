@@ -14,9 +14,14 @@
 
 -export([to_json/2]).
 
+-type state() :: #{
+    page_size := pos_integer(),
+    max_requests := pos_integer()
+}.
+
 %% Callbacks/API
 
--spec init(cowboy_req:req(), any()) -> {cowboy_rest, cowboy_req:req(), map()}.
+-spec init(cowboy_req:req(), any()) -> {cowboy_rest, cowboy_req:req(), state()}.
 init(Req, []) ->
     {ok, PageSize} = application:get_env(hn_aggregator, page_size),
     {ok, MaxRequests} = application:get_env(hn_aggregator, max_http_requests),
@@ -25,20 +30,20 @@ init(Req, []) ->
         max_requests => MaxRequests
     }}.
 
--spec allowed_methods(cowboy_req:req(), map()) -> {[binary()], cowboy_req:req(), map()}.
+-spec allowed_methods(cowboy_req:req(), state()) -> {[binary()], cowboy_req:req(), state()}.
 allowed_methods(Req, State) ->
     {[<<"GET">>], Req, State}.
 
--spec content_types_provided(cowboy_req:req(), map()) ->
-    {[{{binary(), binary(), '*'}, atom()}], cowboy_req:req(), map()}.
+-spec content_types_provided(cowboy_req:req(), state()) ->
+    {[{{binary(), binary(), '*'}, atom()}], cowboy_req:req(), state()}.
 content_types_provided(Req, State) ->
     {[{{<<"application">>, <<"json">>, '*'}, to_json}], Req, State}.
 
--spec is_authorized(cowboy_req:req(), map()) -> {boolean(), cowboy_req:req(), map()}.
+-spec is_authorized(cowboy_req:req(), state()) -> {boolean(), cowboy_req:req(), state()}.
 is_authorized(Req, State) ->
     {true, Req, State}.
 
--spec rate_limited(cowboy_req:req(), map()) -> {boolean(), cowboy_req:req(), map()}.
+-spec rate_limited(cowboy_req:req(), state()) -> {boolean(), cowboy_req:req(), state()}.
 rate_limited(Req, #{max_requests := MaxRequests} = State) ->
     {IP, Port} = cowboy_req:peer(Req),
     ?LOG_DEBUG("Peer IP: ~p, Port: ~p", [IP, Port]),
@@ -51,7 +56,7 @@ rate_limited(Req, #{max_requests := MaxRequests} = State) ->
         end,
     {Res, Req, State}.
 
--spec to_json(cowboy_req:req(), map()) -> {atom(), cowboy_req:req(), map()}.
+-spec to_json(cowboy_req:req(), state()) -> {atom(), cowboy_req:req(), state()}.
 to_json(Req, State) ->
     Req1 = handle_request(Req, State),
     {stop, Req1, State}.

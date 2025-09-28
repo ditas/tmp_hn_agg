@@ -7,7 +7,6 @@
 
 start(HNApiMockPort) ->
     {ok, _} = application:ensure_all_started([ranch, cowboy]),
-
     Dispatch = cowboy_router:compile([
         {'_', [
             {"/v0/:top", hn_api_mock_handler, []},
@@ -19,9 +18,7 @@ start(HNApiMockPort) ->
         [{port, HNApiMockPort}],
         #{env => #{dispatch => Dispatch}}
     ),
-
     ct:pal("HN API mock started on port ~p~n", [HNApiMockPort]),
-
     ok.
 
 stop() ->

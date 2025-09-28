@@ -111,7 +111,6 @@ handle_info(
         top_n := TopN
     } = State
 ) ->
-    ?LOG_WARNING("----------Success Top Stories Request ~p-----------Body ~p", [RequestId, Body]),
     StoriesRequests = handle_top_stories_list(Body, TopN, HNApiBaseURL ++ "/" ++ HNApiItemPath),
     {noreply, State#{stories_requests => StoriesRequests}};
 handle_info(
@@ -123,7 +122,6 @@ handle_info(
         stories := Stories
     } = State
 ) ->
-    ?LOG_WARNING("----------Success Story Request ~p-----------Body ~p", [RequestId, Body]),
     case lists:keytake(RequestId, 2, StoriesRequests) of
         {value, {SortingOrder, _RequestId}, RemainingStoriesRequests} ->
             State1 = State#{
@@ -166,7 +164,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %% Internal
-
+-spec handle_failed_request(any(), any(), state()) -> {integer(), pos_integer(), state()}.
 handle_failed_request(
     RequestId,
     Error,
@@ -176,6 +174,8 @@ handle_failed_request(
     RemainingAttempts = MaxPollingAttempts - UsedPollingAttempts - 1,
     handle_failed_request(RequestId, Error, RemainingAttempts, State).
 
+-spec handle_failed_request(any(), any(), integer(), state()) ->
+    {integer(), pos_integer(), state()}.
 handle_failed_request(
     RequestId,
     Error,
@@ -212,10 +212,10 @@ handle_failed_request(
 handle_top_stories_list(Body, TopN, HNApiItemURL) ->
     TopStoriesIdsTotal = jsone:decode(Body),
     {TopStoriesIds, _} = lists:split(TopN, TopStoriesIdsTotal),
-    ?LOG_DEBUG("Received Top Stories List ~p", [TopStoriesIds]),
+    ?LOG_DEBUG("Received Top Stories List ~p", [length(TopStoriesIds)]),
     {_, StoriesRequests} = lists:foldl(
         fun(Id, {SortingOrder0, Acc}) ->
-            ?LOG_DEBUG("Processing item ID: ~p~n", [Id]),
+            ?LOG_DEBUG("Processing item ID: ~p", [Id]),
             {ok, RequestId1} = httpc:request(
                 get,
                 {HNApiItemURL ++ "/" ++ integer_to_list(Id) ++ ".json", [
@@ -235,7 +235,7 @@ handle_top_stories_list(Body, TopN, HNApiItemURL) ->
 -spec handle_story(binary(), pos_integer()) -> {pos_integer(), map()}.
 handle_story(Body, SortingOrder) ->
     Story = jsone:decode(Body),
-    ?LOG_DEBUG("Received story: ~p~n", [Story]),
+    ?LOG_DEBUG("Received story: ~p", [Story]),
     {SortingOrder, Story}.
 
 -spec handle_stories(state()) -> state().
