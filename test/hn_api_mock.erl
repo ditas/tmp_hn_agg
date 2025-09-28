@@ -16,8 +16,8 @@ start(HNApiMockPort) ->
 
     Dispatch = cowboy_router:compile([
         {'_', [
-            {"/v0/:top", hn_api_mock_handler, [?HN_API_MOCK_STATE_TABLE]},
-            {"/v0/item/:item", hn_api_mock_handler, [?HN_API_MOCK_STATE_TABLE]}
+            {"/v0/:top", hn_api_mock_handler, []},
+            {"/v0/item/:item", hn_api_mock_handler, []}
         ]}
     ]),
     {ok, _} = cowboy:start_clear(

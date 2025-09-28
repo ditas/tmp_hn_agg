@@ -6,72 +6,14 @@
 
 -define(HN_AGGREGATOR, "http://localhost:9999/stories/").
 -define(HN_API_MOCK_PORT, 9998).
--define(STORIES_IDS, [123, 456, 789, 101112, 131415, 161718, 192021]).
--define(STORIES, [
-    #{
-        <<"by">> => <<"test1">>,
-        <<"descendants">> => 1,
-        <<"id">> => 123,
-        <<"kids">> => [],
-        <<"score">> => 155,
-        <<"time">> => 1758828112,
-        <<"title">> => <<"Test1 Title">>,
-        <<"type">> => <<"story">>,
-        <<"url">> => <<"https://test1.com">>
-    },
-    #{
-        <<"by">> => <<"test2">>,
-        <<"descendants">> => 1,
-        <<"id">> => 456,
-        <<"kids">> => [],
-        <<"score">> => 333,
-        <<"time">> => 1758828112,
-        <<"title">> => <<"Test2 Title">>,
-        <<"type">> => <<"story">>,
-        <<"url">> => <<"https://test2.com">>
-    },
-    #{
-        <<"by">> => <<"test3">>,
-        <<"descendants">> => 1,
-        <<"id">> => 789,
-        <<"kids">> => [],
-        <<"score">> => 231,
-        <<"time">> => 1758828112,
-        <<"title">> => <<"Test3 Title">>,
-        <<"type">> => <<"story">>,
-        <<"url">> => <<"https://test3.com">>
-    },
-    #{
-        <<"by">> => <<"test4">>,
-        <<"descendants">> => 1,
-        <<"id">> => 101112,
-        <<"kids">> => [],
-        <<"score">> => 332,
-        <<"time">> => 1758828112,
-        <<"title">> => <<"Test4 Title">>,
-        <<"type">> => <<"story">>,
-        <<"url">> => <<"https://test4.com">>
-    },
-    #{
-        <<"by">> => <<"test5">>,
-        <<"descendants">> => 1,
-        <<"id">> => 131415,
-        <<"kids">> => [],
-        <<"score">> => 654,
-        <<"time">> => 1758828112,
-        <<"title">> => <<"Test5 Title">>,
-        <<"type">> => <<"story">>,
-        <<"url">> => <<"https://test5.com">>
-    }
-]).
 
 %% API
 -export([
     all/0,
     init_per_suite/1,
-    end_per_suite/1,
-    init_per_testcase/2,
-    end_per_testcase/2
+    end_per_suite/1
+    % init_per_testcase/2,
+    % end_per_testcase/2
 ]).
 
 -export([
@@ -98,23 +40,25 @@ end_per_suite(_Config) ->
     ok = application:stop(hn_aggregator),
     ok.
 
-init_per_testcase(poll_stories_success, Config) ->
+% init_per_testcase(poll_stories_success, Config) ->
 
-    %% TODO: fix me
-    hn_api_mock_state_table = ets:new(hn_api_mock_state_table, [named_table, public]),
+%     %% TODO: fix me
+%     hn_api_mock_state_table = ets:new(hn_api_mock_state_table, [named_table, public]),
 
-    ok = hn_api_mock:set_response(topstories, ?STORIES_IDS),
-    ok = hn_api_mock:set_response(items, ?STORIES),
-    Config;
-init_per_testcase(_TestCase, Config) ->
-    Config.
+%     ok = hn_api_mock:set_response(topstories, ?STORIES_IDS),
+%     ok = hn_api_mock:set_response(items, ?STORIES),
+%     Config;
+% init_per_testcase(_TestCase, Config) ->
+%     Config.
 
-end_per_testcase(_TestCase, _Config) ->
-    ok.
+% end_per_testcase(_TestCase, _Config) ->
+%     ok.
 
 poll_stories_success(_Config) ->
     timer:sleep(30000),
-    {ok, {{_, 200, _}, _, Resp}} = httpc:request(
+    % {ok, {{_, 200, _}, _, Resp}}
+    Resp
+    = httpc:request(
         get,
         {?HN_AGGREGATOR ++ "/456", []},
         [],
