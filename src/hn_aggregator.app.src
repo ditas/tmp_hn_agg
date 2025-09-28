@@ -1,6 +1,6 @@
 {application, hn_aggregator, [
     {description, "HN Aggregator with HTTP/WS interface"},
-    {vsn, "0.2.0"},
+    {vsn, "0.3.0"},
     {registered, []},
     {mod, {hn_aggregator_app, []}},
     {applications, [

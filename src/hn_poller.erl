@@ -1,3 +1,14 @@
+%% @doc Hacker News Top Stories Poller
+%%
+%% This module implements a gen_server that periodically polls the Hacker News API
+%% to fetch the top stories. It manages the polling lifecycle, handles HTTP requests
+%% asynchronously, and notifies WebSocket handlers when new stories are available.
+%%
+%% The poller fetches the top N stories from the Hacker News API, retrieves detailed
+%% information for each story, and stores them using hn_storage_handler. It includes
+%% error handling with configurable retry attempts and backoff intervals.
+%%
+%% @end
 -module(hn_poller).
 
 -behaviour(gen_server).
@@ -6,7 +17,6 @@
 -include_lib("kernel/include/logger.hrl").
 
 -export([start_link/0]).
-
 -export([restart_polling/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -28,6 +38,14 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+%% @doc Restart the polling cycle
+%%
+%% Sends a restart message to reset the polling attempts counter and
+%% immediately start a new polling cycle. This is useful for recovering
+%% from persistent failures.
+%%
+%% @returns ok
+%% @end
 -spec restart_polling() -> ok.
 restart_polling() ->
     gen_server:cast(?MODULE, restart).
@@ -163,7 +181,12 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-%% Internal
+
+%% @doc Handle failed HTTP requests with retry logic
+%%
+%% Determines remaining attempts and calculates backoff delay for failed requests.
+%% Differentiates between top stories requests and individual story requests.
+%% @end
 -spec handle_failed_request(any(), any(), state()) -> {integer(), pos_integer(), state()}.
 handle_failed_request(
     RequestId,
@@ -207,6 +230,14 @@ handle_failed_request(
             {RemainingAttempts, PollingRate, State}
     end.
 
+%% @doc Process the top stories list response
+%%
+%% Parses the JSON response containing story IDs and initiates HTTP requests
+%% for the top N stories. Each request is tagged with a sorting order to
+%% maintain the original ranking.
+%%
+%% @returns List of tuples containing {SortingOrder, RequestId}
+%% @end
 -spec handle_top_stories_list(binary(), pos_integer(), string()) ->
     [{pos_integer(), reference()}].
 handle_top_stories_list(Body, TopN, HNApiItemURL) ->
@@ -232,18 +263,40 @@ handle_top_stories_list(Body, TopN, HNApiItemURL) ->
     ),
     StoriesRequests.
 
+%% @doc Process an individual story response
+%%
+%% Parses the JSON response for a single story and associates it with
+%% its sorting order from the top stories list.
+%%
+%% @returns Tuple of {SortingOrder, StoryMap}
+%% @end
 -spec handle_story(binary(), pos_integer()) -> {pos_integer(), map()}.
 handle_story(Body, SortingOrder) ->
     Story = jsone:decode(Body),
     ?LOG_DEBUG("Received story: ~p", [Story]),
     {SortingOrder, Story}.
 
+%% @doc Process all collected stories
+%%
+%% Called when all story requests have completed. Notifies WebSocket handlers
+%% of new stories and stores them using the storage handler. Resets the stories
+%% collection for the next polling cycle.
+%%
+%% @returns Updated state with cleared stories and requests
+%% @end
 -spec handle_stories(state()) -> state().
 handle_stories(#{stories := Stories} = State) ->
     _ = notify_ws_handlers(),
     hn_storage_handler:store_stories(Stories),
     State#{stories => [], stories_requests => []}.
 
+%% @doc Notify all registered WebSocket handlers of story updates
+%%
+%% Sends a stories_updated message to all processes registered in the
+%% default WebSocket handlers process group.
+%%
+%% @returns List of messages sent (one per handler)
+%% @end
 -spec notify_ws_handlers() -> [stories_updated].
 notify_ws_handlers() ->
     Members = pg:get_members(?DEFAULT_WS_HANDLERS_PG_NAME),
