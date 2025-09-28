@@ -1,3 +1,21 @@
+%% @doc Rate Limiter for HTTP/WebSocket Connections
+%%
+%% This module implements a gen_server that provides rate limiting functionality
+%% for WebSocket connections based on client IP addresses. It uses a fixed
+%% time window approach to track connection attempts and enforce limits.
+%%
+%% The rate limiter maintains an ETS table to store connection counts per IP
+%% address within time windows. It automatically cleans up expired entries
+%% to prevent memory leaks and ensure accurate rate limiting.
+%%
+%% Features:
+%% - IP-based rate limiting with configurable thresholds
+%% - Automatic cleanup of expired rate limit entries
+%%
+%% Configuration:
+%% - `rate_limit_cleanup_timeout_ms': Interval for cleaning up expired entries
+%%
+%% @end
 -module(hn_rate_limiter).
 
 -behaviour(gen_server).
@@ -19,6 +37,20 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+%% @doc Check if a connection from the given IP should be allowed
+%%
+%% Each IP address is allowed up to MaxRequests connections within a 60-second time window.
+%% The function increments the connection count and returns whether the
+%% connection should be allowed or denied.
+%%
+%% Time windows are calculated by dividing the current timestamp by the
+%% window size, creating discrete 60-second periods. Old entries are
+%% cleaned up periodically by a background process.
+%%
+%% @param IP The client's IP address
+%% @param MaxRequests Maximum allowed connections per time window
+%% @returns `allow' if under the limit, `{disallow, SecondsLeft}' if over
+%% @end
 -spec check_connection_rate_limit(inet:ip_address(), non_neg_integer()) ->
     allow | {disallow, non_neg_integer()}.
 check_connection_rate_limit(IP, MaxRequests) ->

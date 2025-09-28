@@ -1,3 +1,26 @@
+%% @doc Hacker News Stories Storage Handler
+%%
+%% This module implements a gen_server that manages the storage and retrieval
+%% of Hacker News stories using ETS tables. It provides a dual-table architecture
+%% for efficient story management:
+%%
+%% 1. Stories Table: Stores stories with their ranking order as keys
+%% 2. Sorting Table: Maps story IDs to their ranking positions
+%%
+%% The dual-table approach enables:
+%% - Fast paginated retrieval by ranking order
+%% - Quick lookups by story ID
+%% - Efficient batch storage operations
+%% - Automatic sorting preservation from the HN API
+%%
+%% Storage Structure:
+%% - Stories Table: {Order, StoryMap} where Order is the ranking position
+%% - Sorting Table: {StoryId, Order} for reverse lookups
+%%
+%% The module supports pagination for large story sets and provides debug
+%% functionality for cache management during development and testing.
+%%
+%% @end
 -module(hn_storage_handler).
 
 -behaviour(gen_server).
@@ -24,10 +47,33 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+%% @doc Store a list of stories with their ranking order
+%%
+%% Asynchronously stores stories in both ETS tables. Each story should
+%% be a tuple of {Order, StoryMap} where Order represents the ranking
+%% position from the Hacker News top stories list.
+%%
+%% The function updates both tables:
+%% - Stories table gets {Order, StoryMap} entries
+%% - Sorting table gets {StoryId, Order} mappings for reverse lookups
+%%
+%% @returns ok (asynchronous operation)
+%% @end
 -spec store_stories(list()) -> ok.
 store_stories(Stories) ->
     gen_server:cast(?MODULE, {store_stories, Stories}).
 
+%% @doc Read paginated stories by ranking order
+%%
+%% Retrieves a page of stories based on their ranking order from the
+%% Hacker News top stories list. Uses ETS select with range conditions
+%% for efficient pagination without loading all stories into memory.
+%%
+%% Page numbering is 1-based. The function calculates the appropriate
+%% offset and range for the ETS select operation.
+%%
+%% @returns {ok, [StoryMap]} List of story maps in ranking order
+%% @end
 -spec read_stories(non_neg_integer(), pos_integer()) -> {ok, list()}.
 read_stories(PageNum, PageSize) ->
     Offset = (PageNum - 1) * PageSize,
@@ -37,6 +83,17 @@ read_stories(PageNum, PageSize) ->
     ]),
     {ok, [Story || {_, Story} <- Stories]}.
 
+%% @doc Read a specific story by its Hacker News ID
+%%
+%% Performs a two-step lookup to find a story by its ID:
+%% 1. Look up the story ID in the sorting table to get its order
+%% 2. Look up the order in the stories table to get the full story
+%%
+%% This dual-lookup approach maintains both fast ID-based access and
+%% efficient pagination by ranking order.
+%%
+%% @returns {ok, StoryMap} if found, {error, not_found} if not found
+%% @end
 -spec read_story_by_id(pos_integer()) -> {ok, map()} | {error, term()}.
 read_story_by_id(Id) ->
     case ets:lookup(?SORTING_TABLE, Id) of
@@ -49,10 +106,25 @@ read_story_by_id(Id) ->
             end
     end.
 
+%% @doc Clear all stored stories from cache (debug function)
+%%
+%% Removes all entries from both ETS tables. This is primarily used
+%% for debugging and testing purposes to reset the storage state.
+%%
+%% @returns ok (asynchronous operation)
+%% @end
 -spec clear_cache() -> ok.
 clear_cache() ->
     gen_server:cast(?MODULE, clear_cache).
 
+%% @doc Read all stories from cache (debug function)
+%%
+%% Returns all stories currently stored in the cache. This function
+%% loads the entire stories table into memory and should only be used
+%% for debugging and testing purposes.
+%%
+%% @returns List of all story maps (order information is discarded)
+%% @end
 -spec read_all_stories() -> [{pos_integer(), map()}].
 read_all_stories() ->
     Data = ets:tab2list(?STORIES_TABLE),
@@ -103,6 +175,18 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Internal
 
+%% @doc Create the stories ETS table if it doesn't exist
+%%
+%% Creates an ordered_set table for efficient range queries during
+%% pagination. The ordered_set type ensures stories are stored in
+%% ranking order, enabling fast pagination without sorting overhead.
+%%
+%% Table structure: {Order, StoryMap}
+%% - Order: Ranking position from HN top stories API
+%% - StoryMap: Complete story data from HN item API
+%%
+%% @returns ok
+%% @end
 -spec create_story_table() -> ok.
 create_story_table() ->
     case ets:info(?STORIES_TABLE) of
@@ -115,6 +199,18 @@ create_story_table() ->
             ok
     end.
 
+%% @doc Create the sorting ETS table if it doesn't exist
+%%
+%% Creates a table for fast story ID to ranking order lookups.
+%% This enables efficient story retrieval by ID without scanning
+%% the entire stories table.
+%%
+%% Table structure: {StoryId, Order}
+%% - StoryId: Hacker News story ID from the API
+%% - Order: Corresponding ranking position in stories table
+%%
+%% @returns ok
+%% @end
 -spec create_sorting_table() -> ok.
 create_sorting_table() ->
     case ets:info(?SORTING_TABLE) of

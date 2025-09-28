@@ -1,3 +1,27 @@
+%% @doc HTTP REST Handler for Hacker News Stories API
+%%
+%% This module implements a Cowboy REST handler that provides HTTP endpoints
+%% for accessing stored Hacker News stories. It supports both paginated story
+%% listings and individual story retrieval by ID.
+%%
+%% The handler implements rate limiting per client IP address and provides
+%% JSON responses for all endpoints. It integrates with the storage handler
+%% for data retrieval and the rate limiter for access control.
+%%
+%% Supported endpoints:
+%% - GET /stories?page=N - Paginated list of top stories
+%% - GET /stories/:id - Individual story by Hacker News ID
+%%
+%% Features:
+%% - IP-based rate limiting with configurable thresholds
+%% - Paginated responses for efficient data transfer
+%% - RESTful HTTP status codes and error handling
+%%
+%% Configuration:
+%% - `page_size': Number of stories per page for pagination
+%% - `max_http_requests': Maximum HTTP requests per IP per time window
+%%
+%% @end
 -module(hn_http_handler).
 
 -behaviour(cowboy_rest).
@@ -63,6 +87,21 @@ to_json(Req, State) ->
 
 %% Internal
 
+%% @doc Handle the actual HTTP request logic
+%%
+%% Processes two types of requests:
+%% 1. Story listings: GET /stories?page=N
+%%    - Extracts page parameter (defaults to 1)
+%%    - Retrieves paginated stories from storage
+%%    - Returns JSON array of stories
+%%
+%% 2. Individual stories: GET /stories/:id
+%%    - Extracts story ID from URL path
+%%    - Looks up story by ID in storage
+%%    - Returns single story JSON or 404 if not found
+%%
+%% @returns Updated request object with response sent
+%% @end
 -spec handle_request(cowboy_req:req(), map()) -> cowboy_req:req().
 handle_request(Req, #{page_size := PageSize}) ->
     case cowboy_req:binding(id, Req) of

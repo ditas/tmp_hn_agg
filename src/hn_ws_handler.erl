@@ -1,3 +1,37 @@
+%% @doc WebSocket Handler for Real-time Hacker News Stories
+%%
+%% This module implements a Cowboy WebSocket handler that provides real-time
+%% updates of Hacker News top stories to connected clients. It manages WebSocket
+%% connections with rate limiting, automatic story updates, and message throttling.
+%%
+%% The handler implements a push-based architecture where clients receive:
+%% - Initial story data upon connection establishment
+%% - Automatic updates when new stories are available from the poller
+%% - Rate-limited message handling to prevent abuse
+%%
+%% Features:
+%% - Connection-level rate limiting using IP addresses
+%% - Per-connection message rate limiting with sliding window
+%% - Automatic registration for story update notifications
+%% - JSON-encoded story data transmission
+%% - Configurable idle timeouts and rate limits
+%% - Process group membership for broadcast notifications
+%%
+%% Connection flow:
+%% 1. Client connects and passes IP-based rate limiting
+%% 2. Handler joins process group for story update notifications
+%% 3. Initial story data is sent to client immediately
+%% 4. Handler receives and forwards story updates as they arrive
+%% 5. Client messages are rate-limited to prevent spam
+%%
+%% Configuration:
+%% - `max_ws_connections': Max WebSocket connections per IP
+%% - `ws_idle_timeout_ms': Connection idle timeout in milliseconds
+%% - `top_n': Number of top stories to send (page size)
+%% - `ws_rate_limit_window_ms': Message rate limiting window
+%% - `ws_rate_limit_msg_max_count': Max messages per rate limit window
+%%
+%% @end
 -module(hn_ws_handler).
 
 -behaviour(cowboy_websocket).
@@ -71,6 +105,19 @@ websocket_info(_Info, State) ->
 
 %% Internal functions
 
+%% @doc Check if client has exceeded message rate limits
+%%
+%% Implements a sliding window rate limiting algorithm for WebSocket messages:
+%% 1. Gets current timestamp and calculates window start time
+%% 2. Filters message timestamps to only include those within the window
+%% 3. Compares message count against the configured maximum
+%% 4. Either allows the message (updating timestamps) or disconnects
+%%
+%% This prevents clients from overwhelming the server with excessive messages
+%% while allowing normal interactive usage patterns.
+%%
+%% @returns {ok, UpdatedState} to continue, {stop, State} to disconnect
+%% @end
 -spec check_msg_rate_limit(state()) -> {ok, state()} | {stop, state()}.
 check_msg_rate_limit(
     #{
