@@ -28,7 +28,7 @@ init(Req, _Opts) ->
         allow ->
             {ok, IdleTimeout} = application:get_env(hn_aggregator, ws_idle_timeout_ms),
             {ok, PageSize} = application:get_env(hn_aggregator, top_n),
-            {ok, RateLimitWindowMs} = application:get_env(hn_aggregator, ws_rate_limit_window_ms),
+            {ok, RateLimitWindowMS} = application:get_env(hn_aggregator, ws_rate_limit_window_ms),
             {ok, RateLimitMsgMaxCount} = application:get_env(
                 hn_aggregator, ws_rate_limit_msg_max_count
             ),
@@ -36,7 +36,7 @@ init(Req, _Opts) ->
                 #{
                     msg_timestamps => [],
                     page_size => PageSize,
-                    rate_limit_window_ms => RateLimitWindowMs,
+                    rate_limit_window_ms => RateLimitWindowMS,
                     rate_limit_msg_max_count => RateLimitMsgMaxCount
                 },
                 #{idle_timeout => IdleTimeout}};
@@ -75,12 +75,12 @@ websocket_info(_Info, State) ->
 check_msg_rate_limit(
     #{
         msg_timestamps := MsgTimestamps,
-        rate_limit_window_ms := RateLimitWindow,
+        rate_limit_window_ms := RateLimitWindowMS,
         rate_limit_msg_max_count := RateLimitMsgMaxCount
     } = State
 ) ->
     Now = erlang:system_time(millisecond),
-    WindowStart = Now - RateLimitWindow,
+    WindowStart = Now - RateLimitWindowMS,
     LatestTimestamps = [Ts || Ts <- MsgTimestamps, Ts >= WindowStart],
     case length(LatestTimestamps) > RateLimitMsgMaxCount of
         true ->

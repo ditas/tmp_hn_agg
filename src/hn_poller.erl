@@ -79,6 +79,9 @@ handle_info(
 ) ->
     ?LOG_DEBUG("State on Poll ~p", [State0]),
     ?LOG_DEBUG("Remaining attempts ~p", [RemainingAttempts]),
+
+    ct:pal("======================POLLING State0~p", [State0]),
+
     State =
         case RemainingAttempts > 0 of
             true ->

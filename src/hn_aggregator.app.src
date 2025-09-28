@@ -10,7 +10,8 @@
         inets,
         ssl,
         jsone,
-        cowboy
+        cowboy,
+        observer
     ]},
     {env, []},
     {modules, []},
