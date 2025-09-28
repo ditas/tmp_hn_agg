@@ -65,7 +65,9 @@ handle_cast(
     restart, #{max_polling_attempts := MaxPollingAttempts} = State
 ) ->
     erlang:send(self(), {poll, MaxPollingAttempts}),
-    {noreply, State#{used_polling_attempts => 0, stories_requests => [], top_request_id => undefined}};
+    {noreply, State#{
+        used_polling_attempts => 0, stories_requests => [], top_request_id => undefined
+    }};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -143,24 +145,14 @@ handle_info(
             ?LOG_WARNING("Received response for unknown request: ~p", [RequestId]),
             {noreply, State}
     end;
-handle_info(
-    {http, {_RequestId, Error}},
-    #{
-        max_polling_attempts := MaxPollingAttempts,
-        polling_rate_ms := PollingRate,
-        polling_backoff_ms := PollingBackOffMS,
-        used_polling_attempts := UsedPollingAttempts
-    } = State
-) ->
+handle_info({http, {RequestId, Error}}, #{used_polling_attempts := UsedPollingAttempts} = State0) ->
     ?LOG_WARNING("Received error response: ~p", [Error]),
-    {RemainingAttempts, IncreasedPollingRate} = handle_failed_request(
-        Error, MaxPollingAttempts, UsedPollingAttempts, PollingRate, PollingBackOffMS
+    {RemainingAttempts, IncreasedPollingRate, State} = handle_failed_request(
+        RequestId, Error, State0
     ),
-    %% Restart polling cycle if either of the requests failed (top stories or individual story)
+    %% Restart polling cycle if top stories requests failed. Allow individual stories requests to fail without restarting the cycle.
     erlang:send_after(IncreasedPollingRate, self(), {poll, RemainingAttempts}),
     {noreply, State#{
-        top_request_id => undefined,
-        stories_requests => [],
         used_polling_attempts => UsedPollingAttempts + 1,
         polling_rate_ms => IncreasedPollingRate
     }}.
@@ -173,16 +165,47 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
--spec handle_failed_request(
-    any(), pos_integer(), non_neg_integer(), pos_integer(), pos_integer()
-) -> {non_neg_integer(), pos_integer()}.
+%% Internal
+
 handle_failed_request(
-    Error, MaxPollingAttempts, UsedPollingAttempts, PollingRate0, PollingBackOffMS
+    RequestId,
+    Error,
+    #{max_polling_attempts := MaxPollingAttempts, used_polling_attempts := UsedPollingAttempts} =
+        State
 ) ->
     RemainingAttempts = MaxPollingAttempts - UsedPollingAttempts - 1,
-    ?LOG_WARNING("Request failed with: ~p; Attempts remains: ~p~n", [Error, RemainingAttempts]),
+    handle_failed_request(RequestId, Error, RemainingAttempts, State).
+
+handle_failed_request(
+    RequestId,
+    Error,
+    RemainingAttempts,
+    #{
+        top_request_id := RequestId,
+        max_polling_attempts := MaxPollingAttempts,
+        polling_rate_ms := PollingRate0,
+        polling_backoff_ms := PollingBackOffMS
+    } = State
+) ->
+    ?LOG_WARNING("Top Stories Request failed with: ~p; Attempts remains: ~p", [
+        Error, RemainingAttempts
+    ]),
     PollingRate = PollingRate0 + (PollingBackOffMS * (MaxPollingAttempts - RemainingAttempts)),
-    {RemainingAttempts, PollingRate}.
+    {RemainingAttempts, PollingRate, State#{top_request_id => undefined}};
+handle_failed_request(
+    RequestId,
+    Error,
+    RemainingAttempts,
+    #{polling_rate_ms := PollingRate, stories_requests := Requests0} = State
+) ->
+    case lists:keytake(RequestId, 2, Requests0) of
+        {value, _, Requests} ->
+            ?LOG_WARNING("One of Stories Request failed with: ~p", [Error]),
+            {RemainingAttempts, PollingRate, State#{stories_requests => Requests}};
+        false ->
+            ?LOG_WARNING("Unknown Request failed with: ~p", [Error]),
+            {RemainingAttempts, PollingRate, State}
+    end.
 
 -spec handle_top_stories_list(binary(), pos_integer(), string()) ->
     [{pos_integer(), reference()}].
