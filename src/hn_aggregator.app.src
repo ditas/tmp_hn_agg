@@ -1,6 +1,6 @@
 {application, hn_aggregator, [
-    {description, "An OTP application"},
-    {vsn, "0.1.0"},
+    {description, "HN Aggregator with HTTP/WS interface"},
+    {vsn, "0.2.0"},
     {registered, []},
     {mod, {hn_aggregator_app, []}},
     {applications, [
