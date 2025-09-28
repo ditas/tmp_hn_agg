@@ -96,7 +96,8 @@ clear_cache() ->
     gen_server:cast(?MODULE, clear_cache).
 
 read_all_stories() ->
-    ets:tab2list(?STORIES_TABLE).
+    Data = ets:tab2list(?STORIES_TABLE),
+    [Story || {_Order, Story} <- Data].
 
 %% Internal
 
